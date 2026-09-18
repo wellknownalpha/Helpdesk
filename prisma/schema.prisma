@@ -1,0 +1,256 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  REQUESTER
+  AGENT
+  TEAM_LEAD
+  ADMIN
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketType {
+  INCIDENT
+  SERVICE_REQUEST
+  PROBLEM
+  CHANGE_REQUEST
+  QUESTION
+}
+
+enum TicketSource {
+  PORTAL
+  EMAIL
+  PHONE
+  CHAT
+  API
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(REQUESTER)
+  avatar        String?
+  employeeId    String?   @unique
+  isActive      Boolean   @default(true)
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id])
+  teamId        String?
+  team          Team?     @relation(fields: [teamId], references: [id])
+  createdTickets Ticket[] @relation("RequesterTickets")
+  assignedTickets Ticket[] @relation("AgentTickets")
+  comments      TicketComment[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([role])
+  @@index([teamId])
+  @@index([departmentId])
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  users       User[]
+  tickets     Ticket[]
+  createdAt   DateTime @default(now())
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  leadId      String?
+  members     User[]
+  tickets     Ticket[]
+  createdAt   DateTime @default(now())
+}
+
+model Ticket {
+  id              String         @id @default(cuid())
+  ticketNumber    Int            @unique @default(autoincrement())
+  subject         String
+  description     String
+  status          TicketStatus   @default(NEW)
+  priority        TicketPriority @default(MEDIUM)
+  type            TicketType     @default(INCIDENT)
+  source          TicketSource   @default(PORTAL)
+
+  requesterId     String
+  requester       User           @relation("RequesterTickets", fields: [requesterId], references: [id])
+  assignedAgentId String?
+  assignedAgent   User?          @relation("AgentTickets", fields: [assignedAgentId], references: [id])
+  assignedTeamId  String?
+  assignedTeam    Team?          @relation(fields: [assignedTeamId], references: [id])
+  departmentId    String?
+  department      Department?    @relation(fields: [departmentId], references: [id])
+
+  slaPolicyId     String?
+  slaPolicy       SlaPolicy?     @relation(fields: [slaPolicyId], references: [id])
+  dueDate         DateTime?
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+
+  comments        TicketComment[]
+  attachments     Attachment[]
+  history         TicketHistory[]
+  tags            TagOnTicket[]
+  approvals       ApprovalRequest[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([requesterId])
+  @@index([assignedAgentId])
+  @@index([assignedTeamId])
+  @@index([createdAt])
+}
+
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model TicketHistory {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorId   String
+  field     String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model SlaPolicy {
+  id                String         @id @default(cuid())
+  name              String         @unique
+  priority          TicketPriority @unique
+  firstResponseMins Int
+  resolutionMins    Int
+  businessHoursOnly Boolean        @default(true)
+  tickets           Ticket[]
+}
+
+model KnowledgeArticle {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  category    String
+  isPublished Boolean  @default(false)
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([isPublished])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  details   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+}
+
+model Tag {
+  id      String        @id @default(cuid())
+  name    String        @unique
+  tickets TagOnTicket[]
+}
+
+model TagOnTicket {
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tagId    String
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+}
+
+model ServiceItem {
+  id               String   @id @default(cuid())
+  name             String
+  description      String
+  category         String
+  icon             String   @default("package")
+  requiresApproval Boolean  @default(false)
+  createdAt        DateTime @default(now())
+}
+
+model ApprovalRequest {
+  id         String         @id @default(cuid())
+  ticketId   String
+  ticket     Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  approverId String
+  status     ApprovalStatus @default(PENDING)
+  comments   String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([ticketId])
+  @@index([status])
+}

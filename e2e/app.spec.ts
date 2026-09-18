@@ -1,0 +1,16 @@
+import { test, expect } from "@playwright/test";
+
+test("landing page renders", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByText("NexusDesk").first()).toBeVisible();
+});
+
+test("login page renders", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByPlaceholder("you@company.com")).toBeVisible();
+});
+
+test("unauthenticated dashboard redirects to login", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+});

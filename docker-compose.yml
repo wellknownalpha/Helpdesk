@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexusdesk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexusdesk
+      POSTGRES_PASSWORD: nexusdesk_secret
+      POSTGRES_DB: nexusdesk
+    ports:
+      - "5433:5432"
+    volumes:
+      - nexusdesk-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexusdesk -d nexusdesk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: nexusdesk-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  # Production app: built from Dockerfile, migrations + conditional seed on boot.
+  app:
+    build: .
+    container_name: nexusdesk-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_started
+    ports:
+      - "3002:3000"
+    environment:
+      DATABASE_URL: "postgresql://nexusdesk:nexusdesk_secret@postgres:5432/nexusdesk?schema=public"
+      AUTH_SECRET: "${AUTH_SECRET:?Set AUTH_SECRET in .env (see .env.example)}"
+      AUTH_URL: "${APP_URL:-http://localhost:3002}"
+      NEXTAUTH_URL: "${APP_URL:-http://localhost:3002}"
+      NEXT_PUBLIC_APP_NAME: "NexusDesk"
+      UPLOAD_DIR: "/app/uploads"
+      NOTIFICATIONS_ENABLED: "${NOTIFICATIONS_ENABLED:-true}"
+      SMTP_HOST: "mailhog"
+      SMTP_PORT: "1025"
+      SMTP_FROM: "${SMTP_FROM:-NexusDesk <support@nexusdesk.local>}"
+      SUPPORT_MAILBOX: "${SUPPORT_MAILBOX:-support@nexusdesk.local}"
+      INBOUND_WEBHOOK_SECRET: "${INBOUND_WEBHOOK_SECRET:-}"
+    volumes:
+      - nexusdesk-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Optional inbound mail poller: watches SUPPORT_MAILBOX over IMAP.
+  # Enable with: docker compose --profile mail up -d   (+ MAIL_INBOUND_ENABLED=true, IMAP_* in .env)
+  poller:
+    build: .
+    container_name: nexusdesk-poller
+    restart: unless-stopped
+    profiles: ["mail"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://nexusdesk:nexusdesk_secret@postgres:5432/nexusdesk?schema=public"
+      APP_URL: "${APP_URL:-http://localhost:3002}"
+      NOTIFICATIONS_ENABLED: "${NOTIFICATIONS_ENABLED:-true}"
+      SMTP_HOST: "mailhog"
+      SMTP_PORT: "1025"
+      SMTP_FROM: "${SMTP_FROM:-NexusDesk <support@nexusdesk.local>}"
+      SUPPORT_MAILBOX: "${SUPPORT_MAILBOX:-support@nexusdesk.local}"
+      MAIL_INBOUND_ENABLED: "${MAIL_INBOUND_ENABLED:-false}"
+      IMAP_HOST: "${IMAP_HOST:-}"
+      IMAP_PORT: "${IMAP_PORT:-993}"
+      IMAP_SECURE: "${IMAP_SECURE:-true}"
+      IMAP_USER: "${IMAP_USER:-}"
+      IMAP_PASS: "${IMAP_PASS:-}"
+      IMAP_MAILBOX: "${IMAP_MAILBOX:-INBOX}"
+      IMAP_POLL_SECONDS: "${IMAP_POLL_SECONDS:-60}"
+    command: ["npx", "tsx", "scripts/mail-poller.ts"]
+
+volumes:
+  nexusdesk-pgdata:
+  nexusdesk-uploads:

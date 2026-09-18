@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.git
+.env
+.env.local
+*.log
+coverage
+test-results
+playwright-report
+e2e
+uploads
