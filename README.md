@@ -2,7 +2,6 @@
 
 Production-quality, ready-to-run IT service management platform: ticketing, knowledge base,
 service catalog with approvals, SLA tracking, team analytics, and strict role-based access control.
-Original code — no third-party branding, logos, or proprietary assets.
 
 ## Run it (one command, anywhere incl. EC2)
 
@@ -43,8 +42,6 @@ Demo logins (password `Password123!` — change immediately in Admin → Users):
 
 ## Email in / out (tickets by email + notifications)
 
-Yes — the full loop works:
-
 - **Email → ticket:** send mail to the support mailbox → ticket created, sender gets an
   **acknowledgement** email. Replies containing `[NX-123]` thread onto that ticket
   (reopening it if resolved) instead of creating duplicates.
@@ -52,7 +49,6 @@ Yes — the full loop works:
   (agent→requester, requester→assignee), status/priority/team changes, assignment,
   and resolve/close — each emails the right person, never the actor about their own action.
 
-Try it locally right now (stack already runs MailHog as the catcher):
 
 ```bash
 bash scripts/demo-inbound-email.sh   # creates NX ticket + ack → view at http://localhost:8025
