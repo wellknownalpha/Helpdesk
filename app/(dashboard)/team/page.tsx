@@ -29,7 +29,7 @@ export default async function TeamPage() {
             </div>
             <div>
               <p className="mb-2 text-sm font-semibold">Recent tickets</p>
-              <ul className="text-sm">{t.tickets.map((tk) => <li key={tk.id} className="border-t py-1 first:border-0">NX-{tk.ticketNumber} {tk.subject} [{tk.status}/{tk.priority}]</li>)}</ul>
+              <ul className="text-sm">{t.tickets.map((tk) => <li key={tk.id} className="border-t py-1 first:border-0">EXC-{tk.ticketNumber} {tk.subject} [{tk.status}/{tk.priority}]</li>)}</ul>
             </div>
           </CardContent>
         </Card>

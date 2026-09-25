@@ -26,7 +26,7 @@ export default function ApprovalsPage() {
       <div className="grid gap-4">
         {(data?.data ?? []).map((a: { id: string; status: string; ticket: { id: string; subject: string; ticketNumber: number } }) => (
           <Card key={a.id}>
-            <CardHeader><CardTitle className="text-base">NX-{a.ticket.ticketNumber} — {a.ticket.subject}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">EXC-{a.ticket.ticketNumber} — {a.ticket.subject}</CardTitle></CardHeader>
             <CardContent className="flex items-center gap-2">
               <Badge>{a.status}</Badge>
               <Button size="sm" onClick={() => mutation.mutate({ id: a.id, status: "APPROVED" })}>Approve</Button>

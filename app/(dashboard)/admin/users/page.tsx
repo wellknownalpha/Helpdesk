@@ -87,6 +87,12 @@ export default function AdminUsersPage() {
     onError: (e) => alert(errMsg(e)),
   });
 
+  const remove = useMutation({
+    mutationFn: (u: User) => api(`/api/users/${u.id}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
+    onError: (e) => alert(errMsg(e)),
+  });
+
   const filtered = users.filter((u) =>
     !search || `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(search.toLowerCase())
   );
@@ -107,7 +113,7 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div><Label>Password (optional)</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-44" placeholder="Default: Password123!" /></div>
-            <Button disabled={create.isPending || !form.name || !form.email} onClick={() => create.mutate()}>
+            <Button disabled={create.isPending} onClick={() => create.mutate()}>
               {create.isPending ? "Adding..." : "Add user"}
             </Button>
           </div>
@@ -136,6 +142,7 @@ export default function AdminUsersPage() {
                   <span className="flex justify-end gap-1">
                     <Button size="sm" variant="outline" onClick={() => startEdit(u)}>Edit</Button>
                     <Button size="sm" variant="outline" onClick={() => toggle.mutate(u)}>{u.isActive ? "Deactivate" : "Activate"}</Button>
+                    <Button size="sm" variant="destructive" disabled={remove.isPending || u.id === editing?.id} onClick={() => { if (confirm(`Delete user "${u.email}"? This cannot be undone.`)) remove.mutate(u); }}>Delete</Button>
                   </span>
                 </td>
               </tr>

@@ -1,32 +1,13 @@
 "use client";
 
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
 
 export default function AdminEmailPage() {
-  const [to, setTo] = useState("admin@nexusdesk.local");
-  const [result, setResult] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["email-status"],
     queryFn: async () => (await fetch("/api/admin/email-status")).json(),
   });
-  const test = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/email-test", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Failed");
-      return d.data.sent as boolean;
-    },
-    onSuccess: (sent) => setResult(sent ? `Test email sent to ${to} — check inbox / MailHog.` : "Not sent — SMTP not configured or notifications disabled. See status above."),
-    onError: (e: Error) => setResult(e.message),
-  });
-
   const s = data?.data;
   const row = (label: string, value: React.ReactNode) => (
     <div className="flex justify-between gap-4 border-t py-1.5 text-sm first:border-0">
@@ -62,16 +43,6 @@ export default function AdminEmailPage() {
             )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">Send test email</CardTitle></CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-2">
-              <div><Label>Recipient</Label><Input value={to} onChange={(e) => setTo(e.target.value)} className="w-64" /></div>
-              <Button disabled={test.isPending} onClick={() => test.mutate()}>{test.isPending ? "Sending..." : "Send test"}</Button>
-            </div>
-            {result && <p className="mt-2 text-sm text-muted-foreground">{result}</p>}
-          </CardContent>
-        </Card>
       </div>
       <Card>
         <CardHeader><CardTitle className="text-base">How to connect a real mailbox</CardTitle></CardHeader>
@@ -81,8 +52,8 @@ export default function AdminEmailPage() {
             <ol className="list-decimal pl-5 text-muted-foreground">
               <li>Create a mailbox like <code>support@yourcompany.com</code>. For Gmail: enable 2-step verification, then create an <b>App Password</b>.</li>
               <li>Set in <code>.env</code>: <code>MAIL_INBOUND_ENABLED=true IMAP_HOST=imap.gmail.com IMAP_USER=support@… IMAP_PASS=&lt;app-password&gt;</code>, plus <code>SMTP_*</code> for sending and <code>SUPPORT_MAILBOX=support@…</code>.</li>
-              <li>Start the poller: <code>docker compose --profile mail up -d</code> (or <code>npx tsx scripts/mail-poller.ts</code> natively).</li>
-              <li>Email that address → ticket created, sender gets acknowledgement. Replies with <code>[NX-123]</code> in the subject thread onto the ticket.</li>
+              <li>Start the production mail service with <code>docker compose --profile mail up -d</code>.</li>
+              <li>Email that address → ticket created, sender gets acknowledgement. Replies with <code>[EXC-123]</code> in the subject thread onto the ticket.</li>
             </ol>
           </div>
           <div>

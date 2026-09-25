@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding NexusDesk...");
+  console.log("Seeding ExclDesk...");
 
   // Departments
   const itDept = await prisma.department.upsert({
@@ -38,12 +38,12 @@ async function main() {
   const hash = await bcrypt.hash("Password123!", 10);
 
   const users = [
-    { name: "Ava Admin", email: "admin@nexusdesk.local", role: "ADMIN" as const, employeeId: "NX-001", departmentId: itDept.id },
-    { name: "Liam Lead", email: "lead@nexusdesk.local", role: "TEAM_LEAD" as const, employeeId: "NX-010", departmentId: itDept.id, teamId: supportTeam.id },
-    { name: "Aria Agent", email: "agent@nexusdesk.local", role: "AGENT" as const, employeeId: "NX-020", departmentId: itDept.id, teamId: supportTeam.id },
-    { name: "Noah Agent", email: "agent2@nexusdesk.local", role: "AGENT" as const, employeeId: "NX-021", departmentId: itDept.id, teamId: infraTeam.id },
-    { name: "Mia Requester", email: "requester@nexusdesk.local", role: "REQUESTER" as const, employeeId: "NX-100", departmentId: hrDept.id },
-    { name: "Ethan Requester", email: "ethan@nexusdesk.local", role: "REQUESTER" as const, employeeId: "NX-101", departmentId: finDept.id },
+    { name: "Ava Admin", email: "admin@excldesk.local", role: "ADMIN" as const, employeeId: "EXC-001", departmentId: itDept.id },
+    { name: "Liam Lead", email: "lead@excldesk.local", role: "TEAM_LEAD" as const, employeeId: "EXC-010", departmentId: itDept.id, teamId: supportTeam.id },
+    { name: "Aria Agent", email: "agent@excldesk.local", role: "AGENT" as const, employeeId: "EXC-020", departmentId: itDept.id, teamId: supportTeam.id },
+    { name: "Noah Agent", email: "agent2@excldesk.local", role: "AGENT" as const, employeeId: "EXC-021", departmentId: itDept.id, teamId: infraTeam.id },
+    { name: "Mia Requester", email: "requester@excldesk.local", role: "REQUESTER" as const, employeeId: "EXC-100", departmentId: hrDept.id },
+    { name: "Ethan Requester", email: "ethan@excldesk.local", role: "REQUESTER" as const, employeeId: "EXC-101", departmentId: finDept.id },
   ];
 
   const createdUsers: Record<string, { id: string }> = {};
@@ -98,22 +98,22 @@ async function main() {
   }
 
   // Sample tickets
-  const requester = createdUsers["requester@nexusdesk.local"];
-  const agent = createdUsers["agent@nexusdesk.local"];
+  const requester = createdUsers["requester@excldesk.local"];
+  const agent = createdUsers["agent@excldesk.local"];
   const urgentSla = await prisma.slaPolicy.findUnique({ where: { priority: "URGENT" } });
   const mediumSla = await prisma.slaPolicy.findUnique({ where: { priority: "MEDIUM" } });
 
   const sampleTickets = [
     { subject: "VPN disconnects every 10 minutes", description: "VPN client drops frequently since yesterday. Tried reinstall.", status: "OPEN" as const, priority: "HIGH" as const, type: "INCIDENT" as const, requesterId: requester.id, assignedAgentId: agent.id, assignedTeamId: supportTeam.id, departmentId: hrDept.id, slaPolicyId: mediumSla?.id },
     { subject: "Need Adobe license for design team", description: "2 seats required for Q3 campaign work.", status: "NEW" as const, priority: "MEDIUM" as const, type: "SERVICE_REQUEST" as const, requesterId: requester.id, assignedTeamId: supportTeam.id, departmentId: hrDept.id, slaPolicyId: mediumSla?.id },
-    { subject: "Email outage — cannot send", description: "Outlook shows disconnected; OWA returns 500.", status: "IN_PROGRESS" as const, priority: "URGENT" as const, type: "INCIDENT" as const, requesterId: createdUsers["ethan@nexusdesk.local"].id, assignedAgentId: agent.id, assignedTeamId: infraTeam.id, departmentId: finDept.id, slaPolicyId: urgentSla?.id },
+    { subject: "Email outage — cannot send", description: "Outlook shows disconnected; OWA returns 500.", status: "IN_PROGRESS" as const, priority: "URGENT" as const, type: "INCIDENT" as const, requesterId: createdUsers["ethan@excldesk.local"].id, assignedAgentId: agent.id, assignedTeamId: infraTeam.id, departmentId: finDept.id, slaPolicyId: urgentSla?.id },
   ];
   for (const t of sampleTickets) {
     const existing = await prisma.ticket.findFirst({ where: { subject: t.subject } });
     if (!existing) await prisma.ticket.create({ data: t });
   }
 
-  console.log("Seed complete. Logins: admin/lead/agent/requester @ nexusdesk.local / Password123!");
+  console.log("Seed complete. Logins: admin/lead/agent/requester @ excldesk.local / Password123!");
 }
 
 main()

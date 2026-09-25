@@ -14,7 +14,7 @@ export function ThemeToggle() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    try { localStorage.setItem("nexusdesk-theme", next ? "dark" : "light"); } catch { /* ignore */ }
+    try { localStorage.setItem("excldesk-theme", next ? "dark" : "light"); } catch { /* ignore */ }
   }
 
   return (

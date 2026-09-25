@@ -44,7 +44,7 @@ export async function sendMail(mail: OutboundMail): Promise<boolean> {
   }
   try {
     await getTransporter().sendMail({
-      from: process.env.SMTP_FROM ?? "NexusDesk <support@nexusdesk.local>",
+      from: process.env.SMTP_FROM ?? "ExclDesk <support@excldesk.local>",
       to: mail.to,
       subject: mail.subject,
       text: mail.text,
@@ -68,7 +68,7 @@ function ticketLink(ticketId: string): string {
 }
 
 export function ticketRef(ticketNumber: number): string {
-  return `NX-${ticketNumber}`;
+  return `EXC-${ticketNumber}`;
 }
 
 // ---------- templates ----------
@@ -88,7 +88,7 @@ export function acknowledgementMail(args: {
     ``,
     `Just reply to this email to add updates — your reply will be appended to the same ticket.`,
     ``,
-    `— NexusDesk Support`,
+    `— ExclDesk Support`,
   ].join("\n");
   return { to: args.to, subject: `[${ref}] Received: ${args.subject}`, text };
 }
@@ -107,7 +107,7 @@ export function commentMail(args: {
     ``,
     `View & reply: ${ticketLink(args.ticketId)}`,
     ``,
-    `— NexusDesk Support`,
+    `— ExclDesk Support`,
   ].join("\n");
   return { to: args.to, subject: `[${ref}] New update: ${args.subject}`, text };
 }
@@ -126,7 +126,7 @@ export function statusMail(args: {
       : `${args.actorName} moved ticket ${ref} (${args.subject}) from ${args.oldStatus} to ${args.newStatus}.`,
     closed ? `If the issue persists, just reply to reopen it.` : `Track it: ${ticketLink(args.ticketId)}`,
     ``,
-    `— NexusDesk Support`,
+    `— ExclDesk Support`,
   ].join("\n");
   return {
     to: args.to,
@@ -148,7 +148,7 @@ export function assignedMail(args: {
     `Priority: ${args.priority}`,
     `Open it  : ${ticketLink(args.ticketId)}`,
     ``,
-    `— NexusDesk`,
+    `— ExclDesk`,
   ].join("\n");
   return { to: args.to, subject: `[${ref}] Assigned to you: ${args.subject}`, text };
 }

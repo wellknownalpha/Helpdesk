@@ -52,15 +52,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const isOwner = ticket.requesterId === user.id;
     const isStaff = user.role === "AGENT" || user.role === "TEAM_LEAD" || user.role === "ADMIN";
     if (!isStaff && !isOwner) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const json = await req.json();
     // Requesters may only close/reopen own tickets
     if (!isStaff) {
-      const body = await req.json();
-      const allowed = body.status === "CLOSED" || body.status === "OPEN" || body.status === "NEW";
-      if (!allowed || Object.keys(body).some((k) => !["status"].includes(k)))
+      const allowed = json.status === "CLOSED" || json.status === "OPEN" || json.status === "NEW";
+      if (!allowed || Object.keys(json).some((k) => !["status"].includes(k)))
         return NextResponse.json({ error: "Requesters can only close/reopen their tickets" }, { status: 403 });
     }
 
-    const json = await req.json();
     const parsed = updateTicketSchema.safeParse(json);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
@@ -75,6 +74,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if (parsed.data.status === "RESOLVED") data.resolvedAt = new Date();
     if (parsed.data.status === "CLOSED") data.closedAt = new Date();
+    if (parsed.data.status === "OPEN" || parsed.data.status === "NEW") {
+      data.resolvedAt = null;
+      data.closedAt = null;
+    }
     if (parsed.data.priority && parsed.data.priority !== ticket.priority) {
       const sla = await resolveSlaPolicy(parsed.data.priority as never);
       if (sla) { (data as Record<string, unknown>).slaPolicyId = sla.id; data.dueDate = computeDueDate(new Date(), sla.resolutionMins); }

@@ -5,7 +5,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>NexusDesk</CardTitle>
+          <CardTitle>ExclDesk</CardTitle>
           <CardDescription>Original ITSM workspace — sign in to continue</CardDescription>
         </CardHeader>
         <CardContent>{children}</CardContent>

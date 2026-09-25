@@ -5,7 +5,7 @@ import { db } from "@/lib/db/prisma";
 export async function GET() {
   try {
     await db.$queryRaw`SELECT 1`;
-    return NextResponse.json({ ok: true, service: "nexusdesk", time: new Date().toISOString() });
+    return NextResponse.json({ ok: true, service: "excldesk", time: new Date().toISOString() });
   } catch {
     return NextResponse.json({ ok: false }, { status: 503 });
   }

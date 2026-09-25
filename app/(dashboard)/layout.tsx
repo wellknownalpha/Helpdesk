@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 flex-col border-r bg-muted/30 p-4 md:flex">
-        <Link href="/dashboard" className="mb-6 text-xl font-bold">NexusDesk</Link>
+        <Link href="/dashboard" className="mb-6 text-xl font-bold">ExclDesk</Link>
         <nav className="flex flex-col gap-1">
           {nav.filter((n) => n.roles.includes(role)).map((n) => (
             <Link key={n.href} href={n.href} className="rounded-md px-3 py-2 text-sm hover:bg-accent">{n.label}</Link>

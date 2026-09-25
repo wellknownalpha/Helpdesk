@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge, StatusBadge } from "@/components/ui/badge";
 import { formatDate, slaRemaining, isBreached } from "@/lib/utils";
 import Link from "next/link";
+import { X } from "lucide-react";
 
 async function fetchTickets(params: Record<string, string>) {
   const sp = new URLSearchParams(params);
@@ -17,6 +18,7 @@ async function fetchTickets(params: Record<string, string>) {
 }
 
 export function TicketList({ showMineToggle = false }: { showMineToggle?: boolean }) {
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [priority, setPriority] = useState("all");
@@ -34,6 +36,18 @@ export function TicketList({ showMineToggle = false }: { showMineToggle?: boolea
   const { data, isLoading, isError } = useQuery({
     queryKey: ["tickets", params],
     queryFn: () => fetchTickets(params),
+  });
+
+  const closeTicket = useMutation({
+    mutationFn: (ticketId: string) => fetch(`/api/tickets/${ticketId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "CLOSED" }) }).then(async (res) => {
+      if (!res.ok) {
+        const result = await res.json().catch(() => null);
+        throw new Error(typeof result?.error === "string" ? result.error : "Could not close this ticket.");
+      }
+      return res.json();
+    }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tickets"] }),
+    onError: (error: Error) => window.alert(error.message),
   });
 
   return (
@@ -80,12 +94,13 @@ export function TicketList({ showMineToggle = false }: { showMineToggle?: boolea
               <th className="px-4 py-2">Requester</th>
               <th className="px-4 py-2">SLA</th>
               <th className="px-4 py-2">Updated</th>
+              <th className="px-4 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {(data?.data ?? []).map((t: Record<string, never>) => (
               <tr key={t.id as string} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-2 font-mono">NX-{t.ticketNumber as number}</td>
+                <td className="px-4 py-2 font-mono">EXC-{t.ticketNumber as number}</td>
                 <td className="px-4 py-2">
                   <Link href={`/tickets/${t.id as string}`} className="font-medium text-primary hover:underline">{t.subject as string}</Link>
                   <div className="text-xs text-muted-foreground">{(t.assignedAgent as { name: string } | null)?.name ?? (t.assignedTeam as { name: string } | null)?.name ?? "Unassigned"}</div>
@@ -95,6 +110,9 @@ export function TicketList({ showMineToggle = false }: { showMineToggle?: boolea
                 <td className="px-4 py-2">{(t.requester as { name: string }).name}</td>
                 <td className={`px-4 py-2 text-xs ${isBreached(t.dueDate as string, t.status as string) ? "font-semibold text-red-600" : ""}`}>{slaRemaining(t.dueDate as string)}</td>
                 <td className="px-4 py-2 text-xs text-muted-foreground">{formatDate(t.updatedAt as string)}</td>
+                <td className="px-4 py-2 text-right">
+                  {(t.status as string) !== "CLOSED" && <Button size="sm" variant="outline" disabled={closeTicket.isPending} onClick={() => { if (confirm(`Close EXC-${t.ticketNumber as number}?`)) closeTicket.mutate(t.id as string); }}><X className="mr-1 h-3.5 w-3.5" />Close</Button>}
+                </td>
               </tr>
             ))}
           </tbody>

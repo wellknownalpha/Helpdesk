@@ -7,6 +7,8 @@ const patchSchema = z.object({
   name: z.string().min(2).max(80).optional(),
   description: z.string().max(500).nullable().optional(),
   leadId: z.string().nullable().optional(),
+  addUserId: z.string().optional(),
+  removeUserId: z.string().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -15,7 +17,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const parsed = patchSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    const team = await db.team.update({ where: { id: params.id }, data: parsed.data });
+    const { addUserId, removeUserId, ...teamFields } = parsed.data;
+    if (addUserId && removeUserId) return NextResponse.json({ error: "Choose either add or remove a user" }, { status: 400 });
+    const team = await db.team.update({
+      where: { id: params.id },
+      data: {
+        ...teamFields,
+        ...(addUserId ? { members: { connect: { id: addUserId } } } : {}),
+        ...(removeUserId ? { members: { disconnect: { id: removeUserId } } } : {}),
+      },
+    });
     await db.auditLog.create({ data: { userId: user.id, action: "TEAM_UPDATE", entity: "Team", entityId: team.id, details: parsed.data as never } });
     return NextResponse.json({ data: team });
   } catch (e) {

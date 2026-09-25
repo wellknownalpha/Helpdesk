@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center gap-6 p-8 text-center">
-      <p className="text-sm font-semibold uppercase tracking-widest text-primary">NexusDesk</p>
+      <p className="text-sm font-semibold uppercase tracking-widest text-primary">ExclDesk</p>
       <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
         IT service management your team will actually enjoy
       </h1>
@@ -28,7 +28,7 @@ export default function Home() {
           </div>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">Demo logins: admin@ / lead@ / agent@ / requester@nexusdesk.local · Password123!</p>
+      <p className="text-xs text-muted-foreground">Demo logins: admin@ / lead@ / agent@ / requester@excldesk.local · Password123!</p>
     </main>
   );
 }

@@ -9,6 +9,8 @@ import { TicketActions } from "./actions";
 import { AssignCard } from "@/components/tickets/AssignCard";
 import { TagsCard } from "@/components/tickets/TagsCard";
 import { AttachmentsCard } from "@/components/tickets/AttachmentsCard";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export default async function TicketDetailPage({ params }: { params: { id: string } }) {
   const session = await auth();
@@ -45,12 +47,23 @@ export default async function TicketDetailPage({ params }: { params: { id: strin
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
         <div>
-          <p className="font-mono text-sm text-muted-foreground">NX-{ticket.ticketNumber}</p>
-          <h1 className="text-2xl font-bold">{ticket.subject}</h1>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <Link href="/tickets" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Back to tickets
+          </Link>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs font-medium uppercase tracking-wide text-muted-foreground">EXC-{ticket.ticketNumber}</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight">{ticket.subject}</h1>
+            </div>
+            <div className="flex shrink-0 gap-2">
             <StatusBadge status={ticket.status} />
             <PriorityBadge priority={ticket.priority} />
-            <span className="text-xs text-muted-foreground">{ticket.type} · {ticket.source}</span>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{ticket.type.replace("_", " ")}</span>
+            <span aria-hidden="true">·</span>
+            <span>Received via {ticket.source.toLowerCase()}</span>
           </div>
           {breached && (
             <p className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">

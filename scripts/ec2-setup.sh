@@ -1,5 +1,5 @@
 #!/bin/bash
-# NexusDesk EC2 bootstrap (Amazon Linux 2023 / Ubuntu 22.04+).
+# ExclDesk EC2 bootstrap (Amazon Linux 2023 / Ubuntu 22.04+).
 # Run as root (or with sudo) on a fresh EC2 instance, then deploy the app.
 set -e
 
@@ -24,8 +24,8 @@ echo "      (Restrict 5433/8025/1025 to the instance itself — no SG rule neede
 echo "[3/4] Deploy steps (run as ec2-user / ubuntu):"
 cat <<'EOF'
   # a) Copy this project to the server (from your machine):
-  #    scp -r /path/to/nexusdesk ec2-user@<EC2-IP>:/home/ec2-user/nexusdesk
-  #    — or — git clone <your-repo-url> nexusdesk && cd nexusdesk
+  #    scp -r /path/to/excldesk ec2-user@<EC2-IP>:/home/ec2-user/excldesk
+  #    — or — git clone <your-repo-url> excldesk && cd excldesk
   # b) Configure secrets (REQUIRED):
   cp .env.example .env
   openssl rand -base64 32   # paste output as AUTH_SECRET in .env
@@ -33,7 +33,7 @@ cat <<'EOF'
   # c) Launch everything (builds app, starts DB, migrates, seeds if empty):
   docker compose up -d --build
   # d) Open http://<EC2-IP-or-domain>:3002 and sign in:
-  #    admin@nexusdesk.local / Password123!  (change passwords immediately)
+  #    admin@excldesk.local / Password123!  (change passwords immediately)
 EOF
 
-echo "[4/4] Done. After code changes, redeploy with: docker compose up -d --build"
+echo "[4/4] Done. After code changes, run: sh scripts/deploy.sh"

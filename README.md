@@ -1,4 +1,4 @@
-# NexusDesk — original ITSM & Help Desk
+# ExclDesk — original ITSM & Help Desk
 
 Production-quality, ready-to-run IT service management platform: ticketing, knowledge base,
 service catalog with approvals, SLA tracking, team analytics, and strict role-based access control.
@@ -24,10 +24,10 @@ migrations (`migrate deploy`) → seeds demo data **only if the database is empt
 Next.js in production mode. Existing data is never touched on restarts/upgrades.
 
 Demo logins (password `Password123!` — change immediately in Admin → Users):
-- `admin@nexusdesk.local` (ADMIN — full access)
-- `lead@nexusdesk.local` (TEAM_LEAD)
-- `agent@nexusdesk.local` (AGENT)
-- `requester@nexusdesk.local` (REQUESTER)
+- `admin@excldesk.local` (ADMIN — full access)
+- `lead@excldesk.local` (TEAM_LEAD)
+- `agent@excldesk.local` (AGENT)
+- `requester@excldesk.local` (REQUESTER)
 
 ## Feature tour (Linear-grade speed, Freshservice-grade depth)
 
@@ -43,7 +43,7 @@ Demo logins (password `Password123!` — change immediately in Admin → Users):
 ## Email in / out (tickets by email + notifications)
 
 - **Email → ticket:** send mail to the support mailbox → ticket created, sender gets an
-  **acknowledgement** email. Replies containing `[NX-123]` thread onto that ticket
+  **acknowledgement** email. Replies containing `[EXC-123]` thread onto that ticket
   (reopening it if resolved) instead of creating duplicates.
 - **Notifications:** ticket creation (portal/email/catalog), public comments
   (agent→requester, requester→assignee), status/priority/team changes, assignment,
@@ -51,7 +51,7 @@ Demo logins (password `Password123!` — change immediately in Admin → Users):
 
 
 ```bash
-bash scripts/demo-inbound-email.sh   # creates NX ticket + ack → view at http://localhost:8025
+bash scripts/demo-inbound-email.sh   # creates EXC ticket + ack → view at http://localhost:8025
 # then comment / resolve the ticket in the UI and watch emails land in MailHog
 ```
 
@@ -78,8 +78,10 @@ Connect a real mailbox (Admin → Email page shows live status + test button):
    ```
 4. Open `http://<EC2-IP>:3002`, sign in as admin, change all demo passwords.
 
-Updating later: `docker compose up -d --build` (data persists in the `nexusdesk-pgdata` volume).
-Backup: `docker exec nexusdesk-postgres pg_dump -U nexusdesk nexusdesk > backup.sql`.
+Updating later: pull the new source on the server, then run `sh scripts/deploy.sh`.
+The script rebuilds the app image, force-recreates the app container, and verifies
+`/api/health` before reporting success. Data persists in the `excldesk-pgdata` volume.
+Backup: `docker exec excldesk-postgres pg_dump -U excldesk excldesk > backup.sql`.
 
 ## Local development (without Docker app)
 

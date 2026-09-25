@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST='{"components/CommandPalette.tsx -> next-auth/react":{"id":30051,"files":["static/chunks/51.c42c592699e5db48.js"]}}';

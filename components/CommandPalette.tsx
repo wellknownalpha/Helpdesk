@@ -58,7 +58,7 @@ export function CommandPalette({ role, open, setOpen }: { role: string; open: bo
 
   const filtered = nav.filter((n) => !q || n.label.toLowerCase().includes(q.toLowerCase()));
   const ticketItems: Item[] = tickets.map((t) => ({
-    id: t.id, group: "Tickets", label: `NX-${t.ticketNumber} — ${t.subject}`, hint: t.status,
+    id: t.id, group: "Tickets", label: `EXC-${t.ticketNumber} — ${t.subject}`, hint: t.status,
     icon: <Ticket className="h-4 w-4" />, run: go(`/tickets/${t.id}`),
   }));
   const all = [...filtered, ...ticketItems];

@@ -43,7 +43,7 @@ export default function AdminDepartmentsPage() {
           <div className="flex flex-wrap items-end gap-2">
             <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} className="w-52" placeholder="e.g. Finance" /></div>
             <div><Label>Description</Label><Input value={description} onChange={(e) => setDescription(e.target.value)} className="w-72" placeholder="What this department does" /></div>
-            <Button disabled={create.isPending || !name.trim()} onClick={() => create.mutate()}>Create department</Button>
+            <Button disabled={create.isPending} onClick={() => create.mutate()}>Create department</Button>
           </div>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </CardContent>

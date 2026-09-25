@@ -3,9 +3,9 @@ import { createTicketWithSla } from "@/lib/services/tickets";
 import { notifyTicketComment, notifyTicketCreated } from "@/lib/services/notifications";
 import { detectPriority } from "./parser";
 
-/** Extracts NX-123 style references so email replies thread onto the same ticket. */
+/** Extracts EXC-123 style references so email replies thread onto the same ticket. */
 export function extractTicketNumber(subject: string): number | null {
-  const m = subject.match(/\[?NX-(\d+)\]?/i);
+  const m = subject.match(/\[?EXC-(\d+)\]?/i);
   return m ? parseInt(m[1], 10) : null;
 }
 
@@ -35,7 +35,7 @@ async function findOrCreateRequester(email: string, name?: string) {
 
 /**
  * Single entry point for ALL email intake (webhook + IMAP poller).
- * - Subject contains [NX-123] → appends a public comment, notifies the agent.
+ * - Subject contains [EXC-123] → appends a public comment, notifies the agent.
  * - Otherwise → creates a ticket and sends an acknowledgement to the sender.
  */
 export async function processInboundEmail(mail: InboundEmail): Promise<
@@ -59,7 +59,7 @@ export async function processInboundEmail(mail: InboundEmail): Promise<
       });
       await db.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
       await notifyTicketComment(ticket.id, requester.id, body, false);
-      console.log(`[inbound] reply from ${requester.email} → NX-${ref} (comment)`);
+      console.log(`[inbound] reply from ${requester.email} → EXC-${ref} (comment)`);
       return { action: "comment", ticketId: ticket.id, ticketNumber: ref };
     }
   }
@@ -73,6 +73,6 @@ export async function processInboundEmail(mail: InboundEmail): Promise<
     source: "EMAIL",
   });
   await notifyTicketCreated(ticket);
-  console.log(`[inbound] new ticket NX-${ticket.ticketNumber} from ${requester.email}`);
+  console.log(`[inbound] new ticket EXC-${ticket.ticketNumber} from ${requester.email}`);
   return { action: "created", ticketId: ticket.id, ticketNumber: ticket.ticketNumber };
 }

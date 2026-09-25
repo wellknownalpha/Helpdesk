@@ -46,7 +46,7 @@ function LoginForm() {
         <Link href="/forgot-password" className="text-primary hover:underline">Forgot password?</Link>
       </div>
       <p className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
-        Demo: admin@nexusdesk.local / lead@ / agent@ / requester@nexusdesk.local · Password123!
+        Demo: admin@excldesk.local / lead@ / agent@ / requester@excldesk.local · Password123!
       </p>
     </form>
   );
