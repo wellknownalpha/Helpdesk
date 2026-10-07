@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseInboundEmail } from "@/lib/email/parser";
+import { simpleParser } from "mailparser";
 import { processInboundEmail } from "@/lib/email/inbound";
 
 /**
@@ -22,21 +22,49 @@ export async function POST(req: NextRequest) {
     let from = "email-user@example.com";
     let subject = "(no subject)";
     let text = body;
+    let messageId: string | undefined;
+    let recipientEmails: string[] = [];
     try {
       const json = JSON.parse(body);
       if (json.raw) {
-        const parsed = parseInboundEmail(json.raw);
-        from = parsed.from; subject = parsed.subject; text = parsed.body;
+        const parsed = await simpleParser(json.raw);
+        from = parsed.from?.value?.[0]?.address ?? from;
+        subject = parsed.subject ?? subject;
+        messageId = parsed.messageId?.trim() || undefined;
+        text = (parsed.text ?? "").trim() || "(empty body)";
+        const fields = [parsed.to, parsed.cc, parsed.bcc];
+        recipientEmails = fields.flatMap((field) => {
+          const addresses = Array.isArray(field) ? field : field?.value ?? [];
+          return addresses.flatMap((recipient) => "address" in recipient
+            ? recipient.address ? [recipient.address] : []
+            : "value" in recipient ? recipient.value.map((value) => value.address).filter((value): value is string => Boolean(value)) : []);
+        });
       } else if (json.from || json.subject || json.body) {
         from = json.from ?? from; subject = json.subject ?? subject; text = json.body ?? "";
+        recipientEmails = [json.to, json.cc, json.bcc].flatMap((field) => {
+          if (typeof field === "string") return field.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) ?? [];
+          return Array.isArray(field) ? field.flatMap((value) => typeof value === "string"
+            ? value.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) ?? []
+            : typeof value?.email === "string" ? [value.email] : []) : [];
+        });
       }
     } catch {
-      const parsed = parseInboundEmail(body);
-      from = parsed.from; subject = parsed.subject; text = parsed.body;
+      const parsed = await simpleParser(body);
+      from = parsed.from?.value?.[0]?.address ?? from;
+      subject = parsed.subject ?? subject;
+      messageId = parsed.messageId?.trim() || undefined;
+      text = (parsed.text ?? "").trim() || "(empty body)";
+      const fields = [parsed.to, parsed.cc, parsed.bcc];
+      recipientEmails = fields.flatMap((field) => {
+        const addresses = Array.isArray(field) ? field : field?.value ?? [];
+        return addresses.flatMap((recipient) => "address" in recipient
+          ? recipient.address ? [recipient.address] : []
+          : "value" in recipient ? recipient.value.map((value) => value.address).filter((value): value is string => Boolean(value)) : []);
+      });
     }
 
     const email = from.match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0] ?? from;
-    const result = await processInboundEmail({ fromEmail: email, subject, body: text });
+    const result = await processInboundEmail({ fromEmail: email, subject, body: text, recipientEmails, messageId });
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (e) {
     console.error("[webhook/email]", e);

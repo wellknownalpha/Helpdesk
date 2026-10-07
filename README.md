@@ -110,3 +110,10 @@ npm run dev -- --port 3002
 - `lib/services/` — ticket creation w/ SLA, automation rules, notifications/canned responses
 - `lib/email/` — SMTP mailer + templates, inbound processor (threading), parser, priority detection
 - `prisma/` — schema, migrations, idempotent seed
+
+
+
+
+
+npx tsx scripts/mail-poller.ts --once
+ 1818  npx tsx scripts/mail-poller.ts

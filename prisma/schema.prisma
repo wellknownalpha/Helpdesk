@@ -122,8 +122,11 @@ model Ticket {
   firstResponseAt DateTime?
   resolvedAt      DateTime?
   closedAt        DateTime?
+  inboundMessageId String?       @unique
+  emailSubjectKey String?        @unique
 
   comments        TicketComment[]
+  emailParticipants TicketEmailParticipant[]
   attachments     Attachment[]
   history         TicketHistory[]
   tags            TagOnTicket[]
@@ -140,6 +143,25 @@ model Ticket {
   @@index([createdAt])
 }
 
+model TicketEmailParticipant {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  email     String
+  name      String?
+  createdAt DateTime @default(now())
+
+  @@unique([ticketId, email])
+  @@index([email])
+}
+
+model InboundMailboxCursor {
+  mailbox     String   @id
+  uidValidity BigInt
+  lastUid     Int
+  updatedAt   DateTime @updatedAt
+}
+
 model TicketComment {
   id         String   @id @default(cuid())
   ticketId   String
@@ -148,6 +170,7 @@ model TicketComment {
   author     User     @relation(fields: [authorId], references: [id])
   body       String
   isInternal Boolean  @default(false)
+  inboundMessageId String? @unique
   createdAt  DateTime @default(now())
 
   @@index([ticketId])

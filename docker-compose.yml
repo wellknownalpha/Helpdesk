@@ -82,7 +82,7 @@ services:
       IMAP_USER: "${IMAP_USER:-}"
       IMAP_PASS: "${IMAP_PASS:-}"
       IMAP_MAILBOX: "${IMAP_MAILBOX:-INBOX}"
-      IMAP_POLL_SECONDS: "${IMAP_POLL_SECONDS:-60}"
+      IMAP_RECOVERY_SCAN_MS: "${IMAP_RECOVERY_SCAN_MS:-2000}"
     command: ["npx", "tsx", "scripts/mail-poller.ts"]
 
 volumes:

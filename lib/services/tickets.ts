@@ -11,6 +11,8 @@ export async function createTicketWithSla(data: {
   departmentId?: string | null;
   assignedTeamId?: string | null;
   source?: "PORTAL" | "EMAIL" | "PHONE" | "CHAT" | "API";
+  inboundMessageId?: string | null;
+  emailSubjectKey?: string | null;
   tags?: string[];
 }) {
   const sla = await resolveSlaPolicy(data.priority);
@@ -25,6 +27,8 @@ export async function createTicketWithSla(data: {
       departmentId: data.departmentId ?? undefined,
       assignedTeamId: data.assignedTeamId ?? undefined,
       source: data.source ?? "PORTAL",
+      inboundMessageId: data.inboundMessageId ?? undefined,
+      emailSubjectKey: data.emailSubjectKey ?? undefined,
       slaPolicyId: sla?.id,
       dueDate: sla ? computeDueDate(now, sla.resolutionMins) : undefined,
       history: { create: [{ actorId: data.requesterId, field: "created", newValue: data.subject }] },

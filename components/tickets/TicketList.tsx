@@ -36,6 +36,8 @@ export function TicketList({ showMineToggle = false }: { showMineToggle?: boolea
   const { data, isLoading, isError } = useQuery({
     queryKey: ["tickets", params],
     queryFn: () => fetchTickets(params),
+    refetchInterval: 2000,
+    staleTime: 0,
   });
 
   const closeTicket = useMutation({

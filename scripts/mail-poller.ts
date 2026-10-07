@@ -1,10 +1,11 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { processInboundEmail } from "../lib/email/inbound";
+import { db } from "../lib/db/prisma";
 
-const POLL_SECONDS = Number(process.env.IMAP_POLL_SECONDS ?? 60);
+const RECOVERY_SCAN_MS = Number(process.env.IMAP_RECOVERY_SCAN_MS ?? 2000);
 const MAX_MESSAGES_PER_FOLDER = Number(process.env.IMAP_MAX_MESSAGES_PER_FOLDER ?? 100);
-const LOOKBACK_DAYS = Number(process.env.IMAP_LOOKBACK_DAYS ?? 7);
+const RECONNECT_MAX_MS = 10_000;
 
 function required(name: string): string {
   const value = process.env[name];
@@ -26,75 +27,120 @@ function isAddressedToMailbox(parsed: Awaited<ReturnType<typeof simpleParser>>):
   return recipientAddresses.some((address) => address.toLowerCase() === mailbox) || (typeof deliveredTo === "string" && deliveredTo.toLowerCase().includes(mailbox));
 }
 
-async function getMailboxCandidates(client: ImapFlow): Promise<string[]> {
-  const mailboxes = await client.list();
-  const candidates = new Set<string>();
-  for (const box of mailboxes) {
-    const path = (box as { path?: string }).path ?? (box as { name?: string }).name ?? "";
-    const special = (box as { specialUse?: string }).specialUse ?? "";
-    const normalized = path.trim().replace(/^"|"$/g, "");
-    if (!normalized) continue;
-    const upper = normalized.toUpperCase();
-    if (upper === "[GMAIL]" || upper.includes("STARRED") || upper.includes("SENT") || upper.includes("DRAFT") || upper.includes("TRASH") || upper.includes("SPAM") || upper.includes("JUNK") || upper.includes("IMPORTANT") || ["\\SENT", "\\DRAFTS", "\\TRASH", "\\JUNK", "\\FLAGGED"].includes(special)) continue;
-    if (upper === "INBOX") candidates.add("INBOX");
-    else if (normalized.includes("/") || normalized.includes(" ")) candidates.add(normalized);
-  }
-  if (candidates.size === 0) candidates.add(process.env.IMAP_MAILBOX ?? "INBOX");
-  return Array.from(candidates);
+function getRecipientEmails(parsed: Awaited<ReturnType<typeof simpleParser>>): string[] {
+  const addresses = (field: typeof parsed.to) => Array.isArray(field) ? field : field?.value ?? [];
+  return [...addresses(parsed.to), ...addresses(parsed.cc), ...addresses(parsed.bcc)].flatMap((recipient) => {
+    if ("address" in recipient) return recipient.address ? [recipient.address] : [];
+    if ("value" in recipient) return recipient.value.map((value) => value.address).filter((value): value is string => Boolean(value));
+    return [];
+  });
 }
 
-async function pollOnce(client: ImapFlow): Promise<number> {
-  const mailboxes = await getMailboxCandidates(client);
-  const seenMessageIds = new Set<string>();
-  let handled = 0;
-  for (const mailbox of mailboxes) {
-    const lock = await client.getMailboxLock(mailbox);
-    try {
-      const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-      const unreadUids = await client.search({ seen: false, since });
-      const uids = (Array.isArray(unreadUids) ? unreadUids : []).slice(-MAX_MESSAGES_PER_FOLDER);
+async function processMessage(client: ImapFlow, uid: number, mailbox: string): Promise<void> {
+  const fetched = await client.fetchOne(String(uid), { source: true }, { uid: true });
+  const raw = fetched && (fetched as { source?: Buffer }).source;
+  if (!raw) throw new Error(`Message source unavailable for UID ${uid}`);
+
+  const parsed = await simpleParser(Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw)));
+  const fromAddr = parsed.from?.value?.[0]?.address;
+  if (!fromAddr || !isAddressedToMailbox(parsed)) {
+    await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
+    console.log(`[poller] ignored UID ${uid}: missing sender or not addressed to IMAP_USER`);
+    return;
+  }
+
+  const result = await processInboundEmail({
+    fromEmail: fromAddr,
+    fromName: parsed.from?.value?.[0]?.name,
+    subject: parsed.subject ?? "(no subject)",
+    body: (parsed.text ?? "").trim() || "(empty body)",
+    recipientEmails: getRecipientEmails(parsed),
+    messageId: parsed.messageId?.trim() || undefined,
+  });
+  await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
+  console.log(`[poller] ${fromAddr} -> ${result.action} EXC-${result.ticketNumber} (${mailbox}, UID ${uid})`);
+}
+
+function waitForMailboxChange(client: ImapFlow, mailbox: string): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      client.off("exists", onExists);
+      client.off("close", onClose);
+      resolve();
+    };
+    const onExists = (event: { path: string }) => {
+      if (event.path === mailbox) finish();
+    };
+    const onClose = () => finish();
+    const timer = setTimeout(finish, RECOVERY_SCAN_MS);
+    client.on("exists", onExists);
+    client.once("close", onClose);
+  });
+}
+
+async function runConnection(): Promise<void> {
+  const host = required("IMAP_HOST");
+  const mailbox = process.env.IMAP_MAILBOX?.trim() || "INBOX";
+  const client = new ImapFlow({
+    host,
+    port: Number(process.env.IMAP_PORT ?? 993),
+    secure: process.env.IMAP_SECURE !== "false",
+    auth: { user: required("IMAP_USER"), pass: required("IMAP_PASS") },
+    logger: false,
+  });
+  client.on("error", (error) => console.error("[poller] IMAP connection error", error));
+
+  try {
+    await client.connect();
+    const opened = await client.mailboxOpen(mailbox);
+    const savedCursor = await db.inboundMailboxCursor.findUnique({ where: { mailbox } });
+    let lastUid = savedCursor?.uidValidity === opened.uidValidity
+      ? savedCursor.lastUid
+      : Math.max(0, opened.uidNext - 1);
+    if (!savedCursor || savedCursor.uidValidity !== opened.uidValidity) {
+      await db.inboundMailboxCursor.upsert({
+        where: { mailbox },
+        create: { mailbox, uidValidity: opened.uidValidity, lastUid },
+        update: { uidValidity: opened.uidValidity, lastUid },
+      });
+    }
+    console.log(`[poller] connected to ${host}`);
+    console.log(`[poller] watching ${mailbox} with IMAP IDLE and ${RECOVERY_SCAN_MS}ms recovery scan from UID ${lastUid + 1}`);
+
+    for (;;) {
+      await waitForMailboxChange(client, mailbox);
+      if (!client.usable) throw new Error("IMAP connection closed");
+
+      const newUids = await client.search({ uid: `${lastUid + 1}:*` }, { uid: true });
+      const uids = (Array.isArray(newUids) ? newUids : []).slice(0, MAX_MESSAGES_PER_FOLDER);
       for (const uid of uids) {
         try {
-          const fetched = await client.fetchOne(String(uid), { source: true });
-          const raw = fetched && (fetched as { source?: Buffer }).source;
-          if (!raw) continue;
-          const parsed = await simpleParser(Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw)));
-          const fromAddr = parsed.from?.value?.[0]?.address;
-          if (!fromAddr || !isAddressedToMailbox(parsed)) continue;
-          const messageId = (parsed.headerLines.find((header) => header.key.toLowerCase() === "message-id")?.line ?? "").trim();
-          if (messageId && seenMessageIds.has(messageId)) {
-            await client.messageFlagsAdd(String(uid), ["\\Seen"]);
-            continue;
-          }
-          if (messageId) seenMessageIds.add(messageId);
-          const result = await processInboundEmail({ fromEmail: fromAddr, fromName: parsed.from?.value?.[0]?.name, subject: parsed.subject ?? "(no subject)", body: (parsed.text ?? "").trim() || "(empty body)" });
-          await client.messageFlagsAdd(String(uid), ["\\Seen"]);
-          console.log(`[poller] ${fromAddr} -> ${result.action} EXC-${result.ticketNumber} (${mailbox})`);
-          handled++;
+          await processMessage(client, uid, mailbox);
+          lastUid = uid;
+          await db.inboundMailboxCursor.update({ where: { mailbox }, data: { lastUid } });
         } catch (error) {
-          console.error(`[poller] failed on message ${uid} in ${mailbox}`, error);
+          console.error(`[poller] failed on new UID ${uid}; will retry`, error);
+          break;
         }
       }
-    } finally {
-      lock.release();
     }
+  } finally {
+    if (client.usable) await client.logout().catch(() => undefined);
   }
-  return handled;
 }
 
 async function main() {
-  const client = new ImapFlow({ host: required("IMAP_HOST"), port: Number(process.env.IMAP_PORT ?? 993), secure: process.env.IMAP_SECURE !== "false", auth: { user: required("IMAP_USER"), pass: required("IMAP_PASS") }, logger: false });
-  client.on("error", (error) => console.error("[poller] IMAP connection error", error));
-  await client.connect();
-  console.log(`[poller] connected to ${process.env.IMAP_HOST}`);
+  let retryMs = 1000;
   for (;;) {
     try {
-      const handled = await pollOnce(client);
-      if (handled > 0) console.log(`[poller] cycle handled ${handled} message(s)`);
+      await runConnection();
+      retryMs = 1000;
     } catch (error) {
-      console.error("[poller] cycle failed, will retry", error);
+      console.error(`[poller] IMAP session ended; reconnecting in ${retryMs}ms`, error);
+      await new Promise((resolve) => setTimeout(resolve, retryMs));
+      retryMs = Math.min(retryMs * 2, RECONNECT_MAX_MS);
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_SECONDS * 1000));
   }
 }
 
