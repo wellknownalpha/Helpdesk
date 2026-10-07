@@ -13,20 +13,6 @@ function required(name: string): string {
   return value;
 }
 
-function isAddressedToMailbox(parsed: Awaited<ReturnType<typeof simpleParser>>): boolean {
-  const mailbox = process.env.IMAP_USER?.toLowerCase().trim();
-  if (!mailbox) return true;
-  const addresses = (field: typeof parsed.to) => Array.isArray(field) ? field : field?.value ?? [];
-  const recipients = [...addresses(parsed.to), ...addresses(parsed.cc), ...addresses(parsed.bcc)];
-  const deliveredTo = parsed.headers.get("delivered-to");
-  const recipientAddresses = recipients.flatMap((recipient) => {
-    if ("address" in recipient) return recipient.address ? [recipient.address] : [];
-    if ("value" in recipient) return recipient.value.map((value) => value.address).filter((value): value is string => Boolean(value));
-    return [];
-  });
-  return recipientAddresses.some((address) => address.toLowerCase() === mailbox) || (typeof deliveredTo === "string" && deliveredTo.toLowerCase().includes(mailbox));
-}
-
 function getRecipientEmails(parsed: Awaited<ReturnType<typeof simpleParser>>): string[] {
   const addresses = (field: typeof parsed.to) => Array.isArray(field) ? field : field?.value ?? [];
   return [...addresses(parsed.to), ...addresses(parsed.cc), ...addresses(parsed.bcc)].flatMap((recipient) => {
@@ -42,41 +28,21 @@ async function processMessage(client: ImapFlow, uid: number, mailbox: string): P
   if (!raw) throw new Error(`Message source unavailable for UID ${uid}`);
 
   const parsed = await simpleParser(Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw)));
-  const fromAddr = parsed.from?.value?.[0]?.address;
-  if (!fromAddr || !isAddressedToMailbox(parsed)) {
-    await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
-    console.log(`[poller] ignored UID ${uid}: missing sender or not addressed to IMAP_USER`);
-    return;
-  }
+  const fromAddr = parsed.from?.value?.[0]?.address
+    ?? parsed.replyTo?.value?.[0]?.address
+    ?? `unknown-sender+${uid}@invalid.local`;
 
   const result = await processInboundEmail({
     fromEmail: fromAddr,
     fromName: parsed.from?.value?.[0]?.name,
     subject: parsed.subject ?? "(no subject)",
-    body: (parsed.text ?? "").trim() || "(empty body)",
+    body: (parsed.text ?? "").trim(),
+    htmlBody: typeof parsed.html === "string" ? parsed.html : undefined,
     recipientEmails: getRecipientEmails(parsed),
     messageId: parsed.messageId?.trim() || undefined,
   });
   await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
   console.log(`[poller] ${fromAddr} -> ${result.action} EXC-${result.ticketNumber} (${mailbox}, UID ${uid})`);
-}
-
-function waitForMailboxChange(client: ImapFlow, mailbox: string): Promise<void> {
-  return new Promise((resolve) => {
-    const finish = () => {
-      clearTimeout(timer);
-      client.off("exists", onExists);
-      client.off("close", onClose);
-      resolve();
-    };
-    const onExists = (event: { path: string }) => {
-      if (event.path === mailbox) finish();
-    };
-    const onClose = () => finish();
-    const timer = setTimeout(finish, RECOVERY_SCAN_MS);
-    client.on("exists", onExists);
-    client.once("close", onClose);
-  });
 }
 
 async function runConnection(): Promise<void> {
@@ -106,14 +72,17 @@ async function runConnection(): Promise<void> {
       });
     }
     console.log(`[poller] connected to ${host}`);
-    console.log(`[poller] watching ${mailbox} with IMAP IDLE and ${RECOVERY_SCAN_MS}ms recovery scan from UID ${lastUid + 1}`);
+    console.log(`[poller] watching ${mailbox} with ${RECOVERY_SCAN_MS}ms UID scan from ${lastUid + 1}`);
 
     for (;;) {
-      await waitForMailboxChange(client, mailbox);
+      await new Promise((resolve) => setTimeout(resolve, RECOVERY_SCAN_MS));
       if (!client.usable) throw new Error("IMAP connection closed");
 
       const newUids = await client.search({ uid: `${lastUid + 1}:*` }, { uid: true });
-      const uids = (Array.isArray(newUids) ? newUids : []).slice(0, MAX_MESSAGES_PER_FOLDER);
+      const uids = (Array.isArray(newUids) ? newUids : [])
+        .filter((uid) => uid > lastUid)
+        .slice(0, MAX_MESSAGES_PER_FOLDER);
+      if (uids.length > 0) console.log(`[poller] catch-up found ${uids.length} new message(s)`);
       for (const uid of uids) {
         try {
           await processMessage(client, uid, mailbox);

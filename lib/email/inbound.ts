@@ -27,8 +27,36 @@ export interface InboundEmail {
   fromName?: string;
   subject: string;
   body: string;
+  htmlBody?: string;
   recipientEmails?: string[];
   messageId?: string;
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)\s*>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "- ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&#x([\da-f]{1,6});/gi, (_match, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&#(\d{1,7});/g, (_match, code: string) => String.fromCodePoint(parseInt(code, 10)))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[\t ]+\n/g, "\n")
+    .replace(/\n[\t ]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function emailBodyText(body: string, htmlBody?: string): string {
+  const plainText = body.trim();
+  if (plainText && !/<(?:html|body|div|p|br|table|span)\b/i.test(plainText)) return plainText;
+  return htmlToPlainText(htmlBody?.trim() || plainText);
 }
 
 async function findOrCreateRequester(email: string, name?: string) {
@@ -59,7 +87,7 @@ export async function processInboundEmail(mail: InboundEmail): Promise<
 > {
   const requester = await findOrCreateRequester(mail.fromEmail, mail.fromName);
   const subject = mail.subject?.slice(0, 200) || "(no subject)";
-  const body = mail.body?.slice(0, 8000) || "(empty body)";
+  const body = emailBodyText(mail.body ?? "", mail.htmlBody).slice(0, 8000) || "(empty body)";
   const emailSubjectKey = mail.subject?.trim() ? normalizeEmailSubject(subject) || null : null;
 
   async function appendEmailComment(ticket: { id: string; ticketNumber: number; status: string }, logContext: string) {
@@ -113,7 +141,7 @@ export async function processInboundEmail(mail: InboundEmail): Promise<
   try {
     ticket = await createTicketWithSla({
       subject,
-      description: `From: ${requester.email}\n\n${body}`,
+      description: body,
       priority: detectPriority(`${subject}\n${body}`),
       type: "INCIDENT",
       requesterId: requester.id,

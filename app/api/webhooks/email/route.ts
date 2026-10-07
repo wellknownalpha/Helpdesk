@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     let from = "email-user@example.com";
     let subject = "(no subject)";
     let text = body;
+    let htmlBody: string | undefined;
     let messageId: string | undefined;
     let recipientEmails: string[] = [];
     try {
@@ -31,7 +32,8 @@ export async function POST(req: NextRequest) {
         from = parsed.from?.value?.[0]?.address ?? from;
         subject = parsed.subject ?? subject;
         messageId = parsed.messageId?.trim() || undefined;
-        text = (parsed.text ?? "").trim() || "(empty body)";
+        text = (parsed.text ?? "").trim();
+        htmlBody = typeof parsed.html === "string" ? parsed.html : undefined;
         const fields = [parsed.to, parsed.cc, parsed.bcc];
         recipientEmails = fields.flatMap((field) => {
           const addresses = Array.isArray(field) ? field : field?.value ?? [];
@@ -53,7 +55,8 @@ export async function POST(req: NextRequest) {
       from = parsed.from?.value?.[0]?.address ?? from;
       subject = parsed.subject ?? subject;
       messageId = parsed.messageId?.trim() || undefined;
-      text = (parsed.text ?? "").trim() || "(empty body)";
+      text = (parsed.text ?? "").trim();
+      htmlBody = typeof parsed.html === "string" ? parsed.html : undefined;
       const fields = [parsed.to, parsed.cc, parsed.bcc];
       recipientEmails = fields.flatMap((field) => {
         const addresses = Array.isArray(field) ? field : field?.value ?? [];
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     const email = from.match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0] ?? from;
-    const result = await processInboundEmail({ fromEmail: email, subject, body: text, recipientEmails, messageId });
+    const result = await processInboundEmail({ fromEmail: email, subject, body: text, htmlBody, recipientEmails, messageId });
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (e) {
     console.error("[webhook/email]", e);
