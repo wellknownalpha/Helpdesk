@@ -1,5 +1,5 @@
 import { db } from "@/lib/db/prisma";
-import { acknowledgementMail, assignedMail, commentMail, sendMail, statusMail } from "@/lib/email/mailer";
+import { acknowledgementMail, assignedMail, commentMail, isBlockedRecipient, sendMail, statusMail } from "@/lib/email/mailer";
 
 // NOTE: server-only module (uses nodemailer + Prisma). UI components must
 // import canned responses from "@/lib/canned-responses" instead.
@@ -21,7 +21,7 @@ export async function addTicketEmailParticipants(ticketId: string, participants:
   const unique = new Map<string, string | null>();
   for (const participant of participants) {
     const email = normalizeEmail(participant.email);
-    if (email) unique.set(email, participant.name?.trim() || null);
+    if (email && !isBlockedRecipient(email)) unique.set(email, participant.name?.trim() || null);
   }
   if (!unique.size) return;
   await db.ticketEmailParticipant.createMany({
@@ -45,7 +45,7 @@ async function ticketEmailRecipients(ticket: NonNullable<Awaited<ReturnType<type
   ];
   for (const participant of all) {
     const email = normalizeEmail(participant.email);
-    if (email && email !== supportMailbox && !recipients.has(email)) {
+    if (email && email !== supportMailbox && !isBlockedRecipient(email) && !recipients.has(email)) {
       recipients.set(email, participant.name?.trim() || email);
     }
   }

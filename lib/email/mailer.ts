@@ -10,6 +10,15 @@ export function smtpConfigured(): boolean {
   return Boolean(process.env.SMTP_HOST);
 }
 
+export function isBlockedRecipient(email: string): boolean {
+  return new Set(
+    (process.env.EMAIL_RECIPIENTS_BLOCKLIST ?? "")
+      .split(",")
+      .map((address) => address.trim().toLowerCase())
+      .filter(Boolean),
+  ).has(email.trim().toLowerCase());
+}
+
 function getTransporter(): Transporter {
   if (!transporter) {
     transporter = nodemailer.createTransport({
@@ -34,6 +43,10 @@ export interface OutboundMail {
 
 /** Non-blocking-safe send: logs and swallows errors so ticket flows never break. */
 export async function sendMail(mail: OutboundMail): Promise<boolean> {
+  if (isBlockedRecipient(mail.to)) {
+    console.log(`[mail:skipped-blocked-recipient] to=${mail.to} subject=${mail.subject}`);
+    return false;
+  }
   if (!notificationsEnabled()) {
     console.log(`[mail:skipped-disabled] to=${mail.to} subject=${mail.subject}`);
     return false;

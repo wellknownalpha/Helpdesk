@@ -69,6 +69,7 @@ model User {
   createdTickets Ticket[] @relation("RequesterTickets")
   assignedTickets Ticket[] @relation("AgentTickets")
   comments      TicketComment[]
+  passwordResetTokens PasswordResetToken[]
   auditLogs     AuditLog[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -156,10 +157,25 @@ model TicketEmailParticipant {
 }
 
 model InboundMailboxCursor {
-  mailbox     String   @id
+  accountKey  String
+  mailbox     String
   uidValidity BigInt
   lastUid     Int
   updatedAt   DateTime @updatedAt
+
+  @@id([accountKey, mailbox])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
 }
 
 model TicketComment {

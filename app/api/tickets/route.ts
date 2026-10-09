@@ -12,9 +12,36 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const priority = searchParams.get("priority");
     const type = searchParams.get("type");
+    const requesterId = searchParams.get("requesterId");
     const q = searchParams.get("q");
     const mine = searchParams.get("mine");
     const teamId = searchParams.get("teamId");
+
+    if (searchParams.get("requesters") === "true") {
+      const requesterScope: Record<string, unknown> = {};
+      if (user.role === "REQUESTER") {
+        requesterScope.id = user.id;
+      } else if (user.role === "AGENT") {
+        requesterScope.createdTickets = {
+          some: {
+            OR: [
+              { assignedAgentId: user.id },
+              ...(user.teamId ? [{ assignedTeamId: user.teamId }] : []),
+              { assignedAgentId: null },
+              { requesterId: user.id },
+            ],
+          },
+        };
+      } else {
+        requesterScope.createdTickets = { some: {} };
+      }
+      const requesters = await db.user.findMany({
+        where: requesterScope as never,
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" },
+      });
+      return NextResponse.json({ data: requesters });
+    }
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10)));
 
@@ -22,8 +49,20 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (type) where.type = type;
+    if (requesterId) where.requesterId = requesterId;
     if (teamId) where.assignedTeamId = teamId;
-    if (q) where.OR = [{ subject: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } }];
+    if (q) {
+      const ticketNumberMatch = q.trim().match(/^(?:EXC-?|#)?(\d+)$/i);
+      const ticketNumber = ticketNumberMatch ? Number(ticketNumberMatch[1]) : null;
+      const searchableFields: Record<string, unknown>[] = [
+        { subject: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+      ];
+      if (ticketNumber !== null && Number.isSafeInteger(ticketNumber) && ticketNumber <= 2_147_483_647) {
+        searchableFields.push({ ticketNumber });
+      }
+      where.OR = searchableFields;
+    }
 
     // RBAC scoping
     if (user.role === "REQUESTER") {

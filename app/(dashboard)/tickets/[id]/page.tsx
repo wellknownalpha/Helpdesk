@@ -71,8 +71,14 @@ export default async function TicketDetailPage({ params }: { params: { id: strin
             </p>
           )}
         </div>
-        <Card><CardHeader><CardTitle>Description</CardTitle></CardHeader>
-          <CardContent><p className="whitespace-pre-wrap text-sm">{ticket.description}</p></CardContent></Card>
+        <Card className="min-w-0 overflow-hidden">
+          <CardHeader><CardTitle>Description</CardTitle></CardHeader>
+          <CardContent className="min-w-0">
+            <div className="w-full min-w-0 rounded-md border bg-muted/20 p-4 text-left">
+              <p className="max-w-full whitespace-pre-wrap break-words text-left text-sm leading-6 [overflow-wrap:anywhere]">{ticket.description}</p>
+            </div>
+          </CardContent>
+        </Card>
         <Card><CardHeader><CardTitle>Activity</CardTitle></CardHeader>
           <CardContent>
             <ActivityFeed

@@ -13,6 +13,10 @@ import { processInboundEmail } from "@/lib/email/inbound";
  */
 export async function POST(req: NextRequest) {
   try {
+    if (process.env.MAIL_INBOUND_ENABLED !== "true") {
+      return NextResponse.json({ error: "Inbound email processing is paused" }, { status: 503 });
+    }
+
     const required = process.env.INBOUND_WEBHOOK_SECRET;
     if (required && req.headers.get("x-webhook-secret") !== required) {
       return NextResponse.json({ error: "Invalid webhook secret" }, { status: 401 });

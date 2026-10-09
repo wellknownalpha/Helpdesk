@@ -11,7 +11,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   // Public: auth pages, auth API, health probe, and the inbound-email webhook
   // (webhook enforces its own INBOUND_WEBHOOK_SECRET when configured).
-  const publicPaths = ["/login", "/forgot-password", "/reset-password", "/api/auth", "/api/health", "/api/webhooks/"];
+  const publicPaths = ["/login", "/forgot-password", "/reset-password", "/api/auth", "/api/health", "/api/webhooks/", "/api/password-reset/"];
   if (pathname === "/") return NextResponse.next();
   if (publicPaths.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (pathname.startsWith("/_next") || pathname.startsWith("/favicon")) return NextResponse.next();

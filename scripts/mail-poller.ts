@@ -1,16 +1,38 @@
+import { createHash } from "node:crypto";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { processInboundEmail } from "../lib/email/inbound";
 import { db } from "../lib/db/prisma";
 
-const RECOVERY_SCAN_MS = Number(process.env.IMAP_RECOVERY_SCAN_MS ?? 2000);
+const RECOVERY_SCAN_MS = Number(process.env.IMAP_RECOVERY_SCAN_MS ?? 1000);
 const MAX_MESSAGES_PER_FOLDER = Number(process.env.IMAP_MAX_MESSAGES_PER_FOLDER ?? 100);
+const IMAP_SEARCH_TIMEOUT_MS = Number(process.env.IMAP_SEARCH_TIMEOUT_MS ?? 15_000);
+const IMAP_HEALTH_LOG_INTERVAL_MS = Number(process.env.IMAP_HEALTH_LOG_INTERVAL_MS ?? 60_000);
+const IMAP_MAX_CONNECTION_AGE_MS = Number(process.env.IMAP_MAX_CONNECTION_AGE_MS ?? 300_000);
 const RECONNECT_MAX_MS = 10_000;
+
+if (!Number.isFinite(IMAP_SEARCH_TIMEOUT_MS) || IMAP_SEARCH_TIMEOUT_MS <= 0) {
+  throw new Error("IMAP_SEARCH_TIMEOUT_MS must be a positive number");
+}
+
+if (!Number.isFinite(IMAP_HEALTH_LOG_INTERVAL_MS) || IMAP_HEALTH_LOG_INTERVAL_MS <= 0) {
+  throw new Error("IMAP_HEALTH_LOG_INTERVAL_MS must be a positive number");
+}
+
+if (!Number.isFinite(IMAP_MAX_CONNECTION_AGE_MS) || IMAP_MAX_CONNECTION_AGE_MS <= 0) {
+  throw new Error("IMAP_MAX_CONNECTION_AGE_MS must be a positive number");
+}
 
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required env var ${name}`);
   return value;
+}
+
+function getAccountKey(host: string, port: number, secure: boolean, user: string): string {
+  return createHash("sha256")
+    .update([host.trim().toLowerCase(), port, secure, user.trim().toLowerCase()].join("\0"))
+    .digest("hex");
 }
 
 function getRecipientEmails(parsed: Awaited<ReturnType<typeof simpleParser>>): string[] {
@@ -47,50 +69,150 @@ async function processMessage(client: ImapFlow, uid: number, mailbox: string): P
 
 async function runConnection(): Promise<void> {
   const host = required("IMAP_HOST");
-  const mailbox = process.env.IMAP_MAILBOX?.trim() || "INBOX";
+  const port = Number(process.env.IMAP_PORT ?? 993);
+  const secure = process.env.IMAP_SECURE !== "false";
+  const user = required("IMAP_USER");
+  const mailboxes = [...new Set((process.env.IMAP_MAILBOXES ?? process.env.IMAP_MAILBOX ?? "INBOX,[Gmail]/Spam")
+    .split(",")
+    .map((mailbox) => mailbox.trim())
+    .filter(Boolean))];
+  if (mailboxes.length === 0) throw new Error("At least one IMAP mailbox must be configured");
+  const accountKey = getAccountKey(host, port, secure, user);
   const client = new ImapFlow({
     host,
-    port: Number(process.env.IMAP_PORT ?? 993),
-    secure: process.env.IMAP_SECURE !== "false",
-    auth: { user: required("IMAP_USER"), pass: required("IMAP_PASS") },
+    port,
+    secure,
+    auth: { user, pass: required("IMAP_PASS") },
+    connectionTimeout: IMAP_SEARCH_TIMEOUT_MS,
+    socketTimeout: IMAP_SEARCH_TIMEOUT_MS * 2,
     logger: false,
   });
   client.on("error", (error) => console.error("[poller] IMAP connection error", error));
 
   try {
     await client.connect();
-    const opened = await client.mailboxOpen(mailbox);
-    const savedCursor = await db.inboundMailboxCursor.findUnique({ where: { mailbox } });
-    let lastUid = savedCursor?.uidValidity === opened.uidValidity
-      ? savedCursor.lastUid
-      : Math.max(0, opened.uidNext - 1);
-    if (!savedCursor || savedCursor.uidValidity !== opened.uidValidity) {
-      await db.inboundMailboxCursor.upsert({
-        where: { mailbox },
-        create: { mailbox, uidValidity: opened.uidValidity, lastUid },
-        update: { uidValidity: opened.uidValidity, lastUid },
+    const connectedAt = Date.now();
+    const mailboxStates = [];
+    for (const mailbox of mailboxes) {
+      const opened = await client.mailboxOpen(mailbox);
+      const cursorWhere = { accountKey_mailbox: { accountKey, mailbox } };
+      const savedCursor = await db.inboundMailboxCursor.findUnique({ where: cursorWhere });
+      const legacyCursor = savedCursor ? null : await db.inboundMailboxCursor.findUnique({
+        where: { accountKey_mailbox: { accountKey: "legacy", mailbox } },
       });
+      const legacyCursorIsValid = legacyCursor?.uidValidity === opened.uidValidity
+        && legacyCursor.lastUid < opened.uidNext;
+      const cursorToResume = savedCursor ?? (legacyCursorIsValid ? legacyCursor : null);
+      const cursorIsValid = cursorToResume?.uidValidity === opened.uidValidity
+        && cursorToResume.lastUid < opened.uidNext;
+      let lastUid = cursorIsValid
+        ? cursorToResume.lastUid
+        : Math.max(0, opened.uidNext - 1);
+      if (legacyCursorIsValid && !savedCursor) {
+        console.log(`[poller] adopting legacy cursor for ${mailbox} at UID ${lastUid}`);
+      }
+      if ((savedCursor || legacyCursor) && !cursorIsValid) {
+        const previousCursor = savedCursor ?? legacyCursor;
+        const reason = !previousCursor
+          ? "saved cursor unavailable"
+          : previousCursor.uidValidity !== opened.uidValidity
+            ? "UIDVALIDITY changed"
+            : `saved UID ${previousCursor.lastUid} is beyond UIDNEXT ${opened.uidNext}`;
+        console.warn(`[poller] cursor mismatch for ${mailbox} (${reason}); recovering unread messages before UID ${lastUid + 1}`);
+      }
+      if (!cursorIsValid) {
+        let moreUnread = true;
+        while (moreUnread) {
+          const pendingUids = await client.search({ seen: false }, { uid: true });
+          const unreadUids = (Array.isArray(pendingUids) ? pendingUids : [])
+            .filter((uid) => uid < opened.uidNext)
+            .slice(0, MAX_MESSAGES_PER_FOLDER);
+          moreUnread = unreadUids.length === MAX_MESSAGES_PER_FOLDER;
+          for (const uid of unreadUids) {
+            await processMessage(client, uid, mailbox);
+          }
+        }
+      }
+      if (!cursorIsValid) {
+        await db.inboundMailboxCursor.upsert({
+          where: cursorWhere,
+          create: { accountKey, mailbox, uidValidity: opened.uidValidity, lastUid },
+          update: { uidValidity: opened.uidValidity, lastUid },
+        });
+      }
+      mailboxStates.push({ mailbox, uidValidity: opened.uidValidity, cursorWhere, lastUid });
     }
     console.log(`[poller] connected to ${host}`);
-    console.log(`[poller] watching ${mailbox} with ${RECOVERY_SCAN_MS}ms UID scan from ${lastUid + 1}`);
+    console.log(`[poller] watching ${mailboxes.join(", ")} with ${RECOVERY_SCAN_MS}ms UID scan`);
 
+    let lastHealthLogAt = 0;
     for (;;) {
       await new Promise((resolve) => setTimeout(resolve, RECOVERY_SCAN_MS));
       if (!client.usable) throw new Error("IMAP connection closed");
+      if (Date.now() - connectedAt >= IMAP_MAX_CONNECTION_AGE_MS) {
+        console.warn(`[poller] recycling IMAP session after ${Date.now() - connectedAt}ms to refresh mailbox state`);
+        return;
+      }
 
-      const newUids = await client.search({ uid: `${lastUid + 1}:*` }, { uid: true });
-      const uids = (Array.isArray(newUids) ? newUids : [])
-        .filter((uid) => uid > lastUid)
-        .slice(0, MAX_MESSAGES_PER_FOLDER);
-      if (uids.length > 0) console.log(`[poller] catch-up found ${uids.length} new message(s)`);
-      for (const uid of uids) {
+      const scanStartedAt = new Date();
+      const scanStartedMs = scanStartedAt.getTime();
+      const logHealth = scanStartedMs - lastHealthLogAt >= IMAP_HEALTH_LOG_INTERVAL_MS;
+      if (logHealth) {
+        const cursors = mailboxStates.map((state) => `${state.mailbox}:${state.lastUid}`).join(",");
+        console.log(`[poller] scan started at=${scanStartedAt.toISOString()} cursors=${cursors}`);
+        lastHealthLogAt = scanStartedMs;
+      }
+
+      for (const state of mailboxStates) {
+        const opened = await client.mailboxOpen(state.mailbox);
+        if (opened.uidValidity !== state.uidValidity) {
+          throw new Error(`UIDVALIDITY changed for ${state.mailbox}; restarting mailbox recovery`);
+        }
+        let searchTimeout: NodeJS.Timeout | undefined;
+        let newUids: false | number[] | undefined;
         try {
-          await processMessage(client, uid, mailbox);
-          lastUid = uid;
-          await db.inboundMailboxCursor.update({ where: { mailbox }, data: { lastUid } });
-        } catch (error) {
-          console.error(`[poller] failed on new UID ${uid}; will retry`, error);
-          break;
+          newUids = await Promise.race([
+            client.search({ uid: `${state.lastUid + 1}:*` }, { uid: true }),
+            new Promise<never>((_resolve, reject) => {
+              searchTimeout = setTimeout(() => {
+                const timedOutAt = new Date();
+                const error = new Error(`IMAP UID search timed out after ${IMAP_SEARCH_TIMEOUT_MS}ms`);
+                console.error(`[poller] scan stalled mailbox=${state.mailbox} startedAt=${scanStartedAt.toISOString()} timedOutAt=${timedOutAt.toISOString()}; closing connection`);
+                reject(error);
+                client.close();
+              }, IMAP_SEARCH_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          if (searchTimeout) clearTimeout(searchTimeout);
+        }
+
+        const uids = (Array.isArray(newUids) ? newUids : [])
+          .filter((uid) => uid > state.lastUid)
+          .slice(0, MAX_MESSAGES_PER_FOLDER);
+        const scanCompletedAt = new Date();
+        if (logHealth || uids.length > 0) {
+          console.log(`[poller] scan completed mailbox=${state.mailbox} startedAt=${scanStartedAt.toISOString()} completedAt=${scanCompletedAt.toISOString()} durationMs=${scanCompletedAt.getTime() - scanStartedMs} found=${uids.length}`);
+        }
+        if (uids.length > 0) console.log(`[poller] catch-up found ${uids.length} new message(s) in ${state.mailbox}`);
+        for (const uid of uids) {
+          try {
+            await processMessage(client, uid, state.mailbox);
+            state.lastUid = uid;
+            await db.inboundMailboxCursor.upsert({
+              where: state.cursorWhere,
+              create: {
+                accountKey,
+                mailbox: state.mailbox,
+                uidValidity: state.uidValidity,
+                lastUid: state.lastUid,
+              },
+              update: { lastUid: state.lastUid },
+            });
+          } catch (error) {
+            console.error(`[poller] failed on new UID ${uid} in ${state.mailbox}; will retry`, error);
+            break;
+          }
         }
       }
     }
