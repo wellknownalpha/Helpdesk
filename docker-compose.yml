@@ -38,8 +38,9 @@ services:
     environment:
       DATABASE_URL: "postgresql://excldesk:excldesk_secret@postgres:5432/excldesk?schema=public"
       AUTH_SECRET: "${AUTH_SECRET:?Set AUTH_SECRET in .env (see .env.example)}"
-      AUTH_URL: "${APP_URL:-http://localhost:3002}"
-      NEXTAUTH_URL: "${APP_URL:-http://localhost:3002}"
+      AUTH_URL: "${APP_URL:?Set APP_URL in .env to the public EC2 URL}"
+      NEXTAUTH_URL: "${APP_URL:?Set APP_URL in .env to the public EC2 URL}"
+      APP_URL: "${APP_URL:?Set APP_URL in .env to the public EC2 URL}"
       NEXT_PUBLIC_APP_NAME: "ExclDesk"
       UPLOAD_DIR: "/app/uploads"
       NOTIFICATIONS_ENABLED: "${NOTIFICATIONS_ENABLED:-true}"
@@ -74,7 +75,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://excldesk:excldesk_secret@postgres:5432/excldesk?schema=public"
-      APP_URL: "${APP_URL:-http://localhost:3002}"
+      APP_URL: "${APP_URL:?Set APP_URL in .env to the public EC2 URL}"
       NOTIFICATIONS_ENABLED: "${NOTIFICATIONS_ENABLED:-true}"
       SMTP_HOST: "${SMTP_HOST:-mailhog}"
       SMTP_PORT: "${SMTP_PORT:-1025}"
