@@ -45,7 +45,7 @@ export const loginSchema = z.object({
 export const userSchema = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email(),
-  password: z.string().min(8).optional(),
+  password: z.string().min(8).max(72),
   role: z.enum(["REQUESTER", "AGENT", "TEAM_LEAD", "ADMIN"]),
   departmentId: z.string().nullable().optional(),
   teamId: z.string().nullable().optional(),

@@ -28,7 +28,6 @@ export default function Home() {
           </div>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">Demo logins: admin@ / lead@ / agent@ / requester@excldesk.local · Password123!</p>
     </main>
   );
 }

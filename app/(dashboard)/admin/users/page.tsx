@@ -56,7 +56,7 @@ export default function AdminUsersPage() {
   const depts: { id: string; name: string }[] = deptsData?.data ?? [];
 
   const create = useMutation({
-    mutationFn: () => api("/api/users", "POST", { ...form, password: form.password || undefined }),
+    mutationFn: () => api("/api/users", "POST", form),
     onSuccess: () => {
       setForm({ name: "", email: "", role: "REQUESTER", password: "" });
       setCreateError("");
@@ -112,8 +112,8 @@ export default function AdminUsersPage() {
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <div><Label>Password (optional)</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-44" placeholder="Default: Password123!" /></div>
-            <Button disabled={create.isPending} onClick={() => create.mutate()}>
+            <div><Label>Password</Label><Input type="password" autoComplete="new-password" minLength={8} required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-44" placeholder="At least 8 characters" /></div>
+            <Button disabled={create.isPending || form.password.length < 8} onClick={() => create.mutate()}>
               {create.isPending ? "Adding..." : "Add user"}
             </Button>
           </div>

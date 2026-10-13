@@ -117,3 +117,31 @@ npm run dev -- --port 3002
 
 npx tsx scripts/mail-poller.ts --once
  1818  npx tsx scripts/mail-poller.ts
+
+# To work with dbs 
+docker compose exec postgres psql -U excldesk -d excldesk
+
+SELECT current_database(), current_user;
+
+\dt
+
+-- Check users without exposing password hashes
+SELECT name, email, role, "isActive"
+FROM "User"
+ORDER BY email;
+
+-- Check whether demo-domain accounts exist
+SELECT name, email, role, "isActive"
+FROM "User"
+WHERE email ILIKE '%@excldesk.local';
+
+-- Check recent tickets
+SELECT "ticketNumber", subject, status, source, "createdAt"
+FROM "Ticket"
+ORDER BY "createdAt" DESC
+LIMIT 20;
+
+-- Check applied migrations
+SELECT migration_name, finished_at
+FROM "_prisma_migrations"
+ORDER BY started_at DESC;

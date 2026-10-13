@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       data: {
         ...fields,
         email: fields.email.toLowerCase(),
-        passwordHash: await bcrypt.hash(password ?? "Password123!", 10),
+        passwordHash: await bcrypt.hash(password, 12),
       },
     });
     await db.auditLog.create({ data: { userId: user.id, action: "USER_CREATE", entity: "User", entityId: created.id, details: { email: created.email, role: created.role } } });

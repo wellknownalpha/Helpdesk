@@ -45,9 +45,6 @@ function LoginForm() {
       <div className="flex justify-between text-sm">
         <Link href="/forgot-password" className="text-primary hover:underline">Forgot password?</Link>
       </div>
-      <p className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
-        Demo: admin@excldesk.local / lead@ / agent@ / requester@excldesk.local · Password123!
-      </p>
     </form>
   );
 }
